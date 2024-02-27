@@ -1376,9 +1376,9 @@ static int ax88179_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->mii.reg_num_mask = 0xff;
 	dev->mii.phy_id = 0x03;
 	dev->mii.supports_gmii = 1;
-
+	dev->mii.force_media = 0;
 	dev->net->features |= NETIF_F_SG | NETIF_F_IP_CSUM |
-				NETIF_F_IPV6_CSUM | NETIF_F_RXCSUM | NETIF_F_TSO;
+				NETIF_F_IPV6_CSUM | NETIF_F_RXCSUM | NETIF_F_TSO | NETIF_F_FRAGLIST;
 
 	dev->net->hw_features |= dev->net->features;
 
