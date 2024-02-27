@@ -875,7 +875,10 @@ static void ax88179_set_multicast(struct net_device *net)
 	struct ax88179_data *data = dev->driver_priv;
 	u8 *m_filter = ((u8 *)dev->data);
 
-	data->rxctl = (AX_RX_CTL_START | AX_RX_CTL_AB | AX_RX_CTL_IPE);
+	data->rxctl = (AX_RX_CTL_START | AX_RX_CTL_AB);
+
+	if (NET_IP_ALIGN)
+		data->rxctl |= AX_RX_CTL_IPE;
 
 	if (net->flags & IFF_PROMISC) {
 		data->rxctl |= AX_RX_CTL_PRO;
@@ -1439,9 +1442,9 @@ static int ax88179_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 
 		/* Check CRC or runt packet */
 		if ((*pkt_hdr & (AX_RXHDR_CRC_ERR | AX_RXHDR_DROP_ERR)) ||
-		    pkt_len < 2 + ETH_HLEN) {
-			dev->net->stats.rx_errors++;
-			goto advance_data_ptr;
+			pkt_len < (NET_IP_ALIGN ? 2 : 0) + ETH_HLEN) {
+				dev->net->stats.rx_errors++;
+				goto advance_data_ptr;
 		}
 
 		ax_skb = skb_clone(skb, GFP_ATOMIC);
@@ -1451,8 +1454,13 @@ static int ax88179_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		}
 		skb_trim(ax_skb, pkt_len);
 
-		/* Skip IP alignment pseudo header */
-		skb_pull(ax_skb, 2);
+		if (NET_IP_ALIGN) {
+			/* Skip the pseudo header, 2 bytes at the start of each
+			 * ethernet frame, resulting from hardware 4-byte
+			 * IP header alignment (triggered by AX_RX_CTL_IPE)
+			 */
+			skb_pull(ax_skb, 2);
+		}
 
 		ax_skb->truesize = SKB_TRUESIZE(pkt_len);
 		ax88179_rx_checksum(ax_skb, pkt_hdr);
@@ -1622,8 +1630,10 @@ static int ax88179_reset(struct usbnet *dev)
 	ax88179_write_cmd(dev, AX_ACCESS_MAC, AX_TXCOE_CTL, 1, 1, tmp);
 
 	/* Configure RX control register => start operation */
-	*tmp16 = AX_RX_CTL_DROPCRCERR | AX_RX_CTL_IPE | AX_RX_CTL_START |
+	*tmp16 = AX_RX_CTL_DROPCRCERR | AX_RX_CTL_START |
 		 AX_RX_CTL_AP | AX_RX_CTL_AMALL | AX_RX_CTL_AB;
+	if (NET_IP_ALIGN)
+		*tmp16 |= AX_RX_CTL_IPE;
 	ax88179_write_cmd(dev, AX_ACCESS_MAC, AX_RX_CTL, 2, 2, tmp16);
 
 	*tmp = AX_MONITOR_MODE_PMETYPE | AX_MONITOR_MODE_PMEPOL |
